@@ -11,9 +11,9 @@ using SteamKit2.Discovery;
 namespace DepotDownloader
 {
     [ProtoContract]
-    class AccountSettingsStore
+    public class AccountSettingsStore
     {
-        [ProtoMember(1, IsRequired=false)]
+        [ProtoMember(1, IsRequired = false)]
         public Dictionary<string, byte[]> SentryData { get; private set; }
 
         [ProtoMember(2, IsRequired = false)]
@@ -31,7 +31,7 @@ namespace DepotDownloader
             LoginKeys = new Dictionary<string, string>();
         }
 
-        static bool Loaded
+        public static bool Loaded
         {
             get { return Instance != null; }
         }
