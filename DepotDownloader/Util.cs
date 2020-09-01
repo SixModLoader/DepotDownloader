@@ -8,7 +8,7 @@ using System.Text;
 
 namespace DepotDownloader
 {
-    static class Util
+    public static class Util
     {
         public static string GetSteamOS()
         {

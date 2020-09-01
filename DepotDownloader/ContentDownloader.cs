@@ -25,8 +25,8 @@ namespace DepotDownloader
 
         public static DownloadConfig Config = new DownloadConfig();
 
-        private static Steam3Session steam3;
-        private static Steam3Session.Credentials steam3Credentials;
+        public static Steam3Session Steam3 { get; private set; }
+        private static Steam3Session.Credentials Steam3Credentials;
         private static CDNClientPool cdnPool;
 
         private const string DEFAULT_DOWNLOAD_DIR = "depots";
@@ -111,25 +111,25 @@ namespace DepotDownloader
 
         static bool AccountHasAccess( uint depotId )
         {
-            if ( steam3 == null || steam3.steamUser.SteamID == null || ( steam3.Licenses == null && steam3.steamUser.SteamID.AccountType != EAccountType.AnonUser ) )
+            if ( Steam3 == null || Steam3.steamUser.SteamID == null || ( Steam3.Licenses == null && Steam3.steamUser.SteamID.AccountType != EAccountType.AnonUser ) )
                 return false;
 
             IEnumerable<uint> licenseQuery;
-            if ( steam3.steamUser.SteamID.AccountType == EAccountType.AnonUser )
+            if ( Steam3.steamUser.SteamID.AccountType == EAccountType.AnonUser )
             {
                 licenseQuery = new List<uint>() { 17906 };
             }
             else
             {
-                licenseQuery = steam3.Licenses.Select( x => x.PackageID ).Distinct();
+                licenseQuery = Steam3.Licenses.Select( x => x.PackageID ).Distinct();
             }
 
-            steam3.RequestPackageInfo( licenseQuery );
+            Steam3.RequestPackageInfo( licenseQuery );
 
             foreach ( var license in licenseQuery )
             {
                 SteamApps.PICSProductInfoCallback.PICSProductInfo package;
-                if ( steam3.PackageInfo.TryGetValue( license, out package ) && package != null )
+                if ( Steam3.PackageInfo.TryGetValue( license, out package ) && package != null )
                 {
                     if ( package.KeyValues[ "appids" ].Children.Any( child => child.AsUnsignedInteger() == depotId ) )
                         return true;
@@ -142,15 +142,15 @@ namespace DepotDownloader
             return false;
         }
 
-        internal static KeyValue GetSteam3AppSection( uint appId, EAppInfoSection section )
+        public static KeyValue GetSteam3AppSection( uint appId, EAppInfoSection section )
         {
-            if ( steam3 == null || steam3.AppInfo == null )
+            if ( Steam3 == null || Steam3.AppInfo == null )
             {
                 return null;
             }
 
             SteamApps.PICSProductInfoCallback.PICSProductInfo app;
-            if ( !steam3.AppInfo.TryGetValue( appId, out app ) || app == null )
+            if ( !Steam3.AppInfo.TryGetValue( appId, out app ) || app == null )
             {
                 return null;
             }
@@ -223,7 +223,7 @@ namespace DepotDownloader
                     return INVALID_MANIFEST_ID;
                 }
 
-                steam3.RequestAppInfo( otherAppId );
+                Steam3.RequestAppInfo( otherAppId );
 
                 return GetSteam3DepotManifest( depotId, otherAppId, branch );
             }
@@ -267,9 +267,9 @@ namespace DepotDownloader
                     else if ( encrypted_v2 != KeyValue.Invalid )
                     {
                         // Submit the password to Steam now to get encryption keys
-                        steam3.CheckAppBetaPassword( appId, Config.BetaPassword );
+                        Steam3.CheckAppBetaPassword( appId, Config.BetaPassword );
 
-                        if ( !steam3.AppBetaPasswords.ContainsKey( branch ) )
+                        if ( !Steam3.AppBetaPasswords.ContainsKey( branch ) )
                         {
                             Console.WriteLine( "Password was invalid for branch {0}", branch );
                             return INVALID_MANIFEST_ID;
@@ -279,7 +279,7 @@ namespace DepotDownloader
                         byte[] manifest_bytes;
                         try
                         {
-                            manifest_bytes = CryptoHelper.SymmetricDecryptECB( input, steam3.AppBetaPasswords[ branch ] );
+                            manifest_bytes = CryptoHelper.SymmetricDecryptECB( input, Steam3.AppBetaPasswords[ branch ] );
                         }
                         catch ( Exception e )
                         {
@@ -333,7 +333,7 @@ namespace DepotDownloader
             }
         }
 
-        public static bool InitializeSteam3( string username, string password )
+        public static bool InitializeSteam3( string username = null, string password = null )
         {
             string loginKey = null;
 
@@ -342,7 +342,7 @@ namespace DepotDownloader
                 _ = AccountSettingsStore.Instance.LoginKeys.TryGetValue( username, out loginKey );
             }
 
-            steam3 = new Steam3Session(
+            Steam3 = new Steam3Session(
                 new SteamUser.LogOnDetails()
                 {
                     Username = username,
@@ -353,15 +353,15 @@ namespace DepotDownloader
                 }
             );
 
-            steam3Credentials = steam3.WaitForCredentials();
+            Steam3Credentials = Steam3.WaitForCredentials();
 
-            if ( !steam3Credentials.IsValid )
+            if ( !Steam3Credentials.IsValid )
             {
-                Console.WriteLine( "Unable to get steam3 credentials." );
+                Console.WriteLine( "Unable to get Steam3 credentials." );
                 return false;
             }
 
-            cdnPool = new CDNClientPool( steam3 );
+            cdnPool = new CDNClientPool( Steam3 );
             return true;
         }
 
@@ -373,16 +373,16 @@ namespace DepotDownloader
                 cdnPool = null;
             }
 
-            if ( steam3 == null )
+            if ( Steam3 == null )
                 return;
 
-            steam3.TryWaitForLoginKey();
-            steam3.Disconnect();
+            Steam3.TryWaitForLoginKey();
+            Steam3.Disconnect();
         }
 
         public static async Task DownloadPubfileAsync( uint appId, ulong publishedFileId )
         {
-            var details = steam3.GetPubfileItemInfo( appId, publishedFileId );
+            var details = Steam3.GetPubfileItemInfo( appId, publishedFileId );
 
             if ( details?.manifest_id > 0 )
             {
@@ -406,12 +406,12 @@ namespace DepotDownloader
             Directory.CreateDirectory(Path.Combine(configPath, CONFIG_DIR));
             DepotConfigStore.LoadFromFile(Path.Combine(configPath, CONFIG_DIR, "depot.config"));
 
-            if ( steam3 != null )
-                steam3.RequestAppInfo( appId );
+            if ( Steam3 != null )
+                Steam3.RequestAppInfo( appId );
 
             if ( !AccountHasAccess( appId ) )
             {
-                if ( steam3.RequestFreeAppLicense( appId ) )
+                if ( Steam3.RequestFreeAppLicense( appId ) )
                 {
                     Console.WriteLine( "Obtained FreeOnDemand license for app {0}", appId );
                 }
@@ -526,8 +526,8 @@ namespace DepotDownloader
 
         static DepotDownloadInfo GetDepotInfo( uint depotId, uint appId, ulong manifestId, string branch )
         {
-            if ( steam3 != null && appId != INVALID_APP_ID )
-                steam3.RequestAppInfo( ( uint )appId );
+            if ( Steam3 != null && appId != INVALID_APP_ID )
+                Steam3.RequestAppInfo( ( uint )appId );
 
             string contentName = GetAppOrDepotName( depotId, appId );
 
@@ -539,7 +539,7 @@ namespace DepotDownloader
             }
 
             // Skip requesting an app ticket
-            steam3.AppTickets[ depotId ] = null;
+            Steam3.AppTickets[ depotId ] = null;
 
             if (manifestId == INVALID_MANIFEST_ID)
             {
@@ -567,14 +567,14 @@ namespace DepotDownloader
                 return null;
             }
 
-            steam3.RequestDepotKey( depotId, appId );
-            if ( !steam3.DepotKeys.ContainsKey( depotId ) )
+            Steam3.RequestDepotKey( depotId, appId );
+            if ( !Steam3.DepotKeys.ContainsKey( depotId ) )
             {
                 Console.WriteLine( "No valid depot key for {0}, unable to download.", depotId );
                 return null;
             }
 
-            byte[] depotKey = steam3.DepotKeys[ depotId ];
+            byte[] depotKey = Steam3.DepotKeys[ depotId ];
 
             var info = new DepotDownloadInfo( depotId, manifestId, installDir, contentName );
             info.depotKey = depotKey;
